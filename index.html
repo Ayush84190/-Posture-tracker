@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PostureAI — Live Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* ── RESET & ROOT ─────────────────────────────────────────── */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+:root {
+  --bg:       #060609;
+  --bg1:      #0c0c12;
+  --bg2:      #111119;
+  --bg3:      #18181f;
+  --bg4:      #1f1f28;
+  --line:     rgba(255,255,255,0.06);
+  --line2:    rgba(255,255,255,0.1);
+  --text:     #f0f0f8;
+  --sub:      #8888aa;
+  --muted:    #44445a;
+  --cyan:     #00e5ff;
+  --green:    #69ff8c;
+  --amber:    #ffb700;
+  --red:      #ff4b6e;
+  --violet:   #b060ff;
+  --syne:     'Syne', sans-serif;
+  --mono:     'JetBrains Mono', monospace;
+}
+
+html { font-size: 14px; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--syne);
+  min-height: 100vh;
+  overflow-x: hidden;
+  cursor: none;
+}
+
+/* ── CUSTOM CURSOR ───────────────────────────────────────── */
+.cursor {
+  position: fixed;
+  width: 8px; height: 8px;
+  background: var(--cyan);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9999;
+  transition: transform 0.1s;
+  mix-blend-mode: difference;
+}
+.cursor-ring {
+  position: fixed;
+  width: 32px; height: 32px;
+  border: 1px solid rgba(0,229,255,0.4);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9998;
+  transition: transform 0.12s ease, width 0.2s, height 0.2s;
+}
+
+/* ── ANIMATED BG GRID ────────────────────────────────────── */
+.bg-grid {
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bg-glow {
+  position: fixed;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.12;
+}
+.bg-glow-1 { width:600px;height:600px; background:var(--violet); top:-200px; left:-200px; }
+.bg-glow-2 { width:400px;height:400px; background:var(--cyan);   bottom:-100px; right:-100px; }
+
+/* ── SCANLINE OVERLAY ────────────────────────────────────── */
+.scanlines {
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ── LAYOUT WRAPPER ─────────────────────────────────────── */
+.app { position: relative; z-index: 2; min-height: 100vh; display: flex; flex-direction: column; }
+
+/* ── HEADER ─────────────────────────────────────────────── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  height: 60px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(6,6,9,0.8);
+  backdrop-filter: blur(20px);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.logo-wrap { display:flex; align-items:center; gap: 14px; }
+
+.logo-mark {
+  width: 32px; height: 32px;
+  border: 2px solid var(--cyan);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+.logo-mark::after {
+  content: '';
+  position: absolute;
+  width: 12px; height: 12px;
+  background: var(--cyan);
+  border-radius: 50%;
+  animation: ping 2s infinite;
+}
+@keyframes ping {
+  0%   { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+.logo-text {
+  font-family: var(--syne);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.logo-text span { color: var(--cyan); }
+
+.header-center {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+.header-right { display:flex; align-items:center; gap: 16px; }
+
+.status-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--line2);
+  background: var(--bg2);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--sub);
+  transition: all 0.3s;
+}
+.status-chip.live { border-color: rgba(105,255,140,0.4); color: var(--green); }
+
+.dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: background 0.3s;
+}
+.dot.live { background: var(--green); animation: blink 1.4s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+.hdr-btn {
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--sub);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  cursor: none;
+  transition: all 0.2s;
+}
+.hdr-btn:hover { border-color: var(--cyan); color: var(--cyan); background: rgba(0,229,255,0.05); }
+.hdr-btn.active { background: var(--cyan); color: var(--bg); border-color: var(--cyan); font-weight: 700; }
+
+/* ── MAIN GRID ───────────────────────────────────────────── */
+.grid {
+  display: grid;
+  grid-template-columns: 300px 1fr 280px;
+  grid-template-rows: auto;
+  gap: 1px;
+  background: var(--line);
+  flex: 1;
+}
+
+.panel {
+  background: var(--bg1);
+  padding: 24px;
+  animation: fadeUp 0.5s ease both;
+}
+
+@keyframes fadeUp {
+  from { opacity:0; transform: translateY(12px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+.panel:nth-child(2) { animation-delay: 0.05s; }
+.panel:nth-child(3) { animation-delay: 0.1s; }
+.panel:nth-child(4) { animation-delay: 0.15s; }
+
+.panel-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel-label::before {
+  content: '';
+  display: inline-block;
+  width: 16px; height: 1px;
+  background: var(--cyan);
+}
+
+/* ── LEFT PANEL ─────────────────────────────────────────── */
+.left-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--line);
+}
+
+.score-section {
+  background: var(--bg1);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.score-section::before {
+  content: '';
+  position: absolute;
+  width: 200px; height: 200px;
+  background: radial-gradient(circle, rgba(0,229,255,0.08) 0%, transparent 70%);
+  border-radius: 50%;
+  top: 20px;
+}
+
+.score-ring-outer {
+  position: relative;
+  width: 180px; height: 180px;
+  margin-bottom: 16px;
+}
+
+.score-ring-outer svg { transform: rotate(-90deg); }
+
+.ring-track { fill:none; stroke: var(--bg3); stroke-width:10; }
+.ring-glow  { fill:none; stroke-width:10; stroke-linecap:round; filter: url(#glow); }
+.ring-main  { fill:none; stroke-width:10; stroke-linecap:round; transition: stroke-dashoffset 0.6s cubic-bezier(0.4,0,0.2,1), stroke 0.5s; }
+
+.score-inner {
+  position: absolute;
+  inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+}
+
+.score-big {
+  font-family: var(--syne);
+  font-size: 52px;
+  font-weight: 800;
+  line-height: 1;
+  transition: color 0.5s;
+  letter-spacing: -2px;
+}
+
+.score-denom {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+.score-grade {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  padding: 4px 12px;
+  border-radius: 20px;
+  margin-top: 4px;
+  transition: all 0.5s;
+}
+.grade-excellent { background:rgba(105,255,140,0.12); color:var(--green); border:1px solid rgba(105,255,140,0.3); }
+.grade-good      { background:rgba(0,229,255,0.12);   color:var(--cyan);  border:1px solid rgba(0,229,255,0.3); }
+.grade-warning   { background:rgba(255,183,0,0.12);   color:var(--amber); border:1px solid rgba(255,183,0,0.3); }
+.grade-poor      { background:rgba(255,75,110,0.12);  color:var(--red);   border:1px solid rgba(255,75,110,0.3); }
+
+/* ── METRIC ROWS ─────────────────────────────────────────── */
+.metrics-section { background: var(--bg1); padding: 20px 24px; }
+
+.metric-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+  position: relative;
+}
+.metric-row:last-child { border-bottom: none; }
+
+.metric-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.metric-name {
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metric-icon {
+  width: 22px; height: 22px;
+  border-radius: 4px;
+  display: flex; align-items:center; justify-content:center;
+  font-size: 12px;
+  background: var(--bg3);
+}
+
+.metric-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+.mb-good    { background:rgba(105,255,140,0.12); color:var(--green); }
+.mb-warning { background:rgba(255,183,0,0.12);   color:var(--amber); }
+.mb-alert   { background:rgba(255,75,110,0.12);  color:var(--red); }
+.mb-unknown { background:rgba(68,68,90,0.3);     color:var(--muted); }
+
+.metric-bar-track {
+  height: 3px;
+  background: var(--bg3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.metric-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease, background 0.5s;
+}
+
+.metric-val {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--sub);
+}
+
+/* ── CENTER PANEL ────────────────────────────────────────── */
+.center-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--line);
+}
+
+/* Top stat strips */
+.stat-strip {
+  background: var(--bg1);
+  padding: 18px 24px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+}
+
+.stat-block {
+  padding: 0 20px;
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stat-block:first-child { padding-left: 0; }
+.stat-block:last-child  { border-right: none; }
+
+.stat-key {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.stat-val {
+  font-family: var(--syne);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1;
+}
+
+.stat-unit {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--sub);
+}
+
+/* Charts area */
+.charts-area {
+  background: var(--bg1);
+  padding: 24px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.chart-block { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.chart-canvas-wrap { flex:1; min-height: 140px; position: relative; }
+
+/* Session table */
+.table-section {
+  background: var(--bg1);
+  padding: 20px 24px;
+}
+
+.session-table { width:100%; border-collapse:collapse; }
+
+.session-table th {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 400;
+}
+
+.session-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--sub);
+  transition: color 0.2s;
+}
+
+.session-table tr:hover td { color: var(--text); background: rgba(255,255,255,0.02); }
+.session-table tr:last-child td { border-bottom: none; }
+
+.score-tag {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 4px;
+}
+
+.no-sessions {
+  text-align: center;
+  padding: 32px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+
+/* ── RIGHT PANEL ─────────────────────────────────────────── */
+.right-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--line);
+}
+
+.alerts-section { background:var(--bg1); padding:20px; flex:1; display:flex; flex-direction:column; }
+
+.alerts-scroll {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  padding-right: 4px;
+}
+
+.alert-card {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  animation: slideRight 0.3s ease;
+  transition: border-left-color 0.3s;
+}
+.alert-card.bad  { border-left-color: var(--red); }
+.alert-card.warn { border-left-color: var(--amber); }
+
+@keyframes slideRight {
+  from { opacity:0; transform:translateX(10px); }
+  to   { opacity:1; transform:translateX(0); }
+}
+
+.alert-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.alert-type {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.alert-time {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.alert-msg {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+/* Live numbers section */
+.live-nums { background:var(--bg1); padding: 20px; }
+
+.num-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+.num-cell {
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: border-color 0.3s;
+}
+.num-cell:hover { border-color: var(--line2); }
+
+.num-key {
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.num-val {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+
+.num-unit {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+}
+
+/* Session timer */
+.timer-section {
+  background: var(--bg1);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timer-display {
+  font-family: var(--syne);
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  color: var(--cyan);
+  text-shadow: 0 0 20px rgba(0,229,255,0.3);
+}
+
+.timer-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+.progress-multi { display:flex; flex-direction:column; gap:8px; }
+
+.prog-row { display:flex; flex-direction:column; gap:4px; }
+.prog-label { display:flex; justify-content:space-between; font-family:var(--mono); font-size:9px; color:var(--muted); letter-spacing:1px; }
+.prog-track { height:4px; background:var(--bg3); border-radius:2px; overflow:hidden; }
+.prog-fill  { height:100%; border-radius:2px; transition:width 0.6s ease; }
+
+/* ── SCROLLBAR ───────────────────────────────────────────── */
+::-webkit-scrollbar { width:3px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--bg4); border-radius:2px; }
+
+/* ── TOAST ───────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(60px);
+  background: var(--bg3);
+  border: 1px solid var(--line2);
+  color: var(--text);
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  z-index: 999;
+  transition: transform 0.3s ease;
+  white-space: nowrap;
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- SVG DEFS -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+</svg>
+
+<!-- CURSOR -->
+<div class="cursor" id="cur"></div>
+<div class="cursor-ring" id="cur-ring"></div>
+
+<!-- BG EFFECTS -->
+<div class="bg-grid"></div>
+<div class="bg-glow bg-glow-1"></div>
+<div class="bg-glow bg-glow-2"></div>
+<div class="scanlines"></div>
+
+<div class="app">
+
+<!-- ── HEADER ──────────────────────────────────────────── -->
+<header>
+  <div class="logo-wrap">
+    <div class="logo-mark"></div>
+    <div class="logo-text">POSTURE<span>AI</span></div>
+  </div>
+  <div class="header-center" id="hdr-time">--:--:-- · INITIALIZING</div>
+  <div class="header-right">
+    <div class="status-chip" id="ws-chip">
+      <div class="dot" id="ws-dot"></div>
+      <span id="ws-label">OFFLINE</span>
+    </div>
+    <button class="hdr-btn active" id="btn-connect" onclick="connectWS()">CONNECT</button>
+    <button class="hdr-btn" onclick="loadStats()">REFRESH</button>
+  </div>
+</header>
+
+<!-- ── MAIN GRID ────────────────────────────────────────── -->
+<div class="grid">
+
+  <!-- LEFT: Score + Metrics -->
+  <div class="left-panel">
+
+    <!-- Score Ring -->
+    <div class="score-section">
+      <div class="panel-label">Live Score</div>
+      <div class="score-ring-outer">
+        <svg viewBox="0 0 180 180" width="180" height="180">
+          <circle class="ring-track" cx="90" cy="90" r="78"/>
+          <circle class="ring-glow" id="ring-glow" cx="90" cy="90" r="78"
+            stroke="rgba(0,229,255,0.15)"
+            stroke-dasharray="490" stroke-dashoffset="490"/>
+          <circle class="ring-main" id="ring-main" cx="90" cy="90" r="78"
+            stroke="var(--cyan)"
+            stroke-dasharray="490" stroke-dashoffset="490"/>
+        </svg>
+        <div class="score-inner">
+          <div class="score-big" id="score-big" style="color:var(--cyan)">--</div>
+          <div class="score-denom">/ 100</div>
+        </div>
+      </div>
+      <div class="score-grade grade-unknown" id="score-grade">WAITING</div>
+    </div>
+
+    <!-- Metric Rows -->
+    <div class="metrics-section">
+      <div class="panel-label">Body Analysis</div>
+
+      <div class="metric-row">
+        <div class="metric-top">
+          <div class="metric-name">
+            <div class="metric-icon">🦴</div>
+            Head Position
+          </div>
+          <span class="metric-badge mb-unknown" id="badge-head">—</span>
+        </div>
+        <div class="metric-bar-track">
+          <div class="metric-bar-fill" id="bar-head" style="width:0%;background:var(--cyan)"></div>
+        </div>
+        <div class="metric-val" id="val-head">Head angle: --°</div>
+      </div>
+
+      <div class="metric-row">
+        <div class="metric-top">
+          <div class="metric-name">
+            <div class="metric-icon">💪</div>
+            Shoulder Slope
+          </div>
+          <span class="metric-badge mb-unknown" id="badge-shoulder">—</span>
+        </div>
+        <div class="metric-bar-track">
+          <div class="metric-bar-fill" id="bar-shoulder" style="width:0%;background:var(--cyan)"></div>
+        </div>
+        <div class="metric-val" id="val-shoulder">Slope: --°</div>
+      </div>
+
+      <div class="metric-row">
+        <div class="metric-top">
+          <div class="metric-name">
+            <div class="metric-icon">👁</div>
+            Gaze Direction
+          </div>
+          <span class="metric-badge mb-unknown" id="badge-gaze">—</span>
+        </div>
+        <div class="metric-bar-track">
+          <div class="metric-bar-fill" id="bar-gaze" style="width:0%;background:var(--cyan)"></div>
+        </div>
+        <div class="metric-val" id="val-gaze">Gaze offset: --</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CENTER: Stats + Charts + History -->
+  <div class="center-panel">
+
+    <!-- Stat strip -->
+    <div class="stat-strip">
+      <div class="stat-block">
+        <div class="stat-key">Sessions</div>
+        <div class="stat-val" id="st-sessions" style="color:var(--cyan)">--</div>
+        <div class="stat-unit">total</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-key">Avg Score</div>
+        <div class="stat-val" id="st-avg" style="color:var(--green)">--</div>
+        <div class="stat-unit">/ 100</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-key">Time Tracked</div>
+        <div class="stat-val" id="st-time" style="color:var(--amber)">--</div>
+        <div class="stat-unit">minutes</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-key">Total Alerts</div>
+        <div class="stat-val" id="st-alerts" style="color:var(--red)">--</div>
+        <div class="stat-unit">fired</div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-area">
+      <div class="chart-block">
+        <div class="panel-label">Score Trend — Last 20 Sessions</div>
+        <div class="chart-canvas-wrap">
+          <canvas id="chart-trend"></canvas>
+        </div>
+      </div>
+      <div class="chart-block">
+        <div class="panel-label">Live Feed — Past 60 Seconds</div>
+        <div class="chart-canvas-wrap" style="min-height:110px;">
+          <canvas id="chart-live"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- History Table -->
+    <div class="table-section">
+      <div class="panel-label">Session History</div>
+      <table class="session-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Started</th>
+            <th>Duration</th>
+            <th>Avg Score</th>
+            <th>Best</th>
+            <th>Alerts</th>
+          </tr>
+        </thead>
+        <tbody id="tbl-body">
+          <tr><td colspan="6" class="no-sessions">Connecting to backend…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- RIGHT: Alerts + Numbers + Timer -->
+  <div class="right-panel">
+
+    <!-- Session Timer -->
+    <div class="timer-section">
+      <div class="panel-label">Session</div>
+      <div class="timer-display" id="timer">00:00</div>
+      <div class="timer-sub" id="timer-sub">SESSION NOT STARTED</div>
+      <div class="progress-multi">
+        <div class="prog-row">
+          <div class="prog-label"><span>GOOD POSTURE</span><span id="pct-good">--%</span></div>
+          <div class="prog-track"><div class="prog-fill" id="fill-good" style="width:0%;background:var(--green)"></div></div>
+        </div>
+        <div class="prog-row">
+          <div class="prog-label"><span>WARNING</span><span id="pct-warn">--%</span></div>
+          <div class="prog-track"><div class="prog-fill" id="fill-warn" style="width:0%;background:var(--amber)"></div></div>
+        </div>
+        <div class="prog-row">
+          <div class="prog-label"><span>POOR</span><span id="pct-poor">--%</span></div>
+          <div class="prog-track"><div class="prog-fill" id="fill-poor" style="width:0%;background:var(--red)"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Numbers -->
+    <div class="live-nums">
+      <div class="panel-label">Raw Metrics</div>
+      <div class="num-grid">
+        <div class="num-cell">
+          <div class="num-key">Head °</div>
+          <div class="num-val" id="n-head">--</div>
+          <div class="num-unit">degrees</div>
+        </div>
+        <div class="num-cell">
+          <div class="num-key">Shoulder</div>
+          <div class="num-val" id="n-shoulder">--</div>
+          <div class="num-unit">degrees</div>
+        </div>
+        <div class="num-cell">
+          <div class="num-key">Gaze H</div>
+          <div class="num-val" id="n-gazeh">--</div>
+          <div class="num-unit">offset</div>
+        </div>
+        <div class="num-cell">
+          <div class="num-key">Light</div>
+          <div class="num-val" id="n-light">--</div>
+          <div class="num-unit">lux</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alerts Feed -->
+    <div class="alerts-section">
+      <div class="panel-label">Alert Feed</div>
+      <div class="alerts-scroll" id="alerts-scroll">
+        <div style="text-align:center;padding:20px;color:var(--muted);font-family:var(--mono);font-size:10px;">
+          NO ALERTS YET
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div><!-- end grid -->
+</div><!-- end app -->
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CURSOR ──────────────────────────────────────────────
+const cur = document.getElementById('cur');
+const curRing = document.getElementById('cur-ring');
+let mx=0,my=0,rx=0,ry=0;
+document.addEventListener('mousemove', e => {
+  mx = e.clientX; my = e.clientY;
+  cur.style.left = mx-4 + 'px';
+  cur.style.top  = my-4 + 'px';
+});
+(function animRing(){
+  rx += (mx - rx) * 0.15;
+  ry += (my - ry) * 0.15;
+  curRing.style.left = rx-16 + 'px';
+  curRing.style.top  = ry-16 + 'px';
+  requestAnimationFrame(animRing);
+})();
+
+// ── CONFIG ───────────────────────────────────────────────
+const API_BASE = 'http://localhost:8000/api';
+const WS_URL   = 'ws://localhost:8000/ws/posture';
+
+// ── STATE ────────────────────────────────────────────────
+let ws = null;
+let livePoints = [];
+let sessionStart = null;
+let frameCount = { good:0, warn:0, poor:0 };
+let alertLog = [];
+
+// ── CLOCK ────────────────────────────────────────────────
+setInterval(() => {
+  const now = new Date();
+  const ts  = now.toTimeString().slice(0,8);
+  const d   = now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  document.getElementById('hdr-time').textContent = `${ts} · ${d}`;
+  if (sessionStart) {
+    const sec = Math.floor((Date.now() - sessionStart)/1000);
+    const m = String(Math.floor(sec/60)).padStart(2,'0');
+    const s = String(sec%60).padStart(2,'0');
+    document.getElementById('timer').textContent = `${m}:${s}`;
+    const total = frameCount.good + frameCount.warn + frameCount.poor;
+    if (total > 0) {
+      const gp = Math.round(frameCount.good/total*100);
+      const wp = Math.round(frameCount.warn/total*100);
+      const pp = 100 - gp - wp;
+      document.getElementById('pct-good').textContent = gp+'%';
+      document.getElementById('pct-warn').textContent = wp+'%';
+      document.getElementById('pct-poor').textContent = pp+'%';
+      document.getElementById('fill-good').style.width = gp+'%';
+      document.getElementById('fill-warn').style.width = wp+'%';
+      document.getElementById('fill-poor').style.width = pp+'%';
+    }
+  }
+}, 1000);
+
+// ── WEBSOCKET ────────────────────────────────────────────
+function connectWS() {
+  if (ws) { ws.close(); ws=null; }
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    document.getElementById('ws-dot').classList.add('live');
+    document.getElementById('ws-chip').classList.add('live');
+    document.getElementById('ws-label').textContent = 'LIVE';
+    document.getElementById('btn-connect').textContent = 'CONNECTED';
+    if (!sessionStart) {
+      sessionStart = Date.now();
+      document.getElementById('timer-sub').textContent = 'SESSION ACTIVE';
+    }
+    toast('Connected to PostureAI tracker', 'cyan');
+  };
+
+  ws.onclose = () => {
+    document.getElementById('ws-dot').classList.remove('live');
+    document.getElementById('ws-chip').classList.remove('live');
+    document.getElementById('ws-label').textContent = 'OFFLINE';
+    document.getElementById('btn-connect').textContent = 'CONNECT';
+    setTimeout(connectWS, 4000);
+  };
+
+  ws.onerror = () => {};
+
+  ws.onmessage = e => {
+    try {
+      const d = JSON.parse(e.data);
+      updateLive(d);
+    } catch {}
+  };
+}
+
+// ── UPDATE LIVE ──────────────────────────────────────────
+function updateLive(d) {
+  const score = d.posture_score || 0;
+  const circ  = 2 * Math.PI * 78; // r=78
+
+  // Ring
+  const offset = circ - (score/100)*circ;
+  const col    = score>=70 ? 'var(--green)' : score>=40 ? 'var(--amber)' : 'var(--red)';
+  document.getElementById('ring-main').style.strokeDashoffset = offset;
+  document.getElementById('ring-main').style.stroke = col;
+  document.getElementById('ring-glow').style.strokeDashoffset = offset;
+  document.getElementById('ring-glow').style.stroke = col.replace('var(','').replace(')','').includes('#') ? col : col;
+  document.getElementById('score-big').textContent = score;
+  document.getElementById('score-big').style.color = col;
+
+  // Grade label
+  const grade = document.getElementById('score-grade');
+  if (score >= 85) { grade.textContent='EXCELLENT'; grade.className='score-grade grade-excellent'; }
+  else if (score >= 70) { grade.textContent='GOOD';  grade.className='score-grade grade-good'; }
+  else if (score >= 40) { grade.textContent='WARNING'; grade.className='score-grade grade-warning'; }
+  else if (score > 0)   { grade.textContent='POOR';    grade.className='score-grade grade-poor'; }
+  else                  { grade.textContent='WAITING'; grade.className='score-grade grade-unknown'; }
+
+  // Track frame distribution
+  if (score >= 70)      frameCount.good++;
+  else if (score >= 40) frameCount.warn++;
+  else if (score > 0)   frameCount.poor++;
+
+  // Metric rows
+  setMetric('head',     d.head_position_status, d.head_forward_angle,
+            `Head angle: ${d.head_forward_angle?.toFixed(1)||'--'}°`,
+            Math.min(100, Math.abs(d.head_forward_angle||0) / 25 * 100));
+
+  setMetric('shoulder', d.shoulder_status, d.shoulder_slope,
+            `Slope: ${d.shoulder_slope?.toFixed(1)||'--'}°`,
+            Math.min(100, (d.shoulder_slope||0) / 15 * 100));
+
+  const gazeMag = Math.hypot(d.gaze_horizontal||0, d.gaze_vertical||0);
+  setMetric('gaze', d.eye_contact_status, gazeMag,
+            `Gaze offset: ${gazeMag.toFixed(2)}`,
+            Math.min(100, gazeMag / 0.4 * 100));
+
+  // Raw nums
+  document.getElementById('n-head').textContent     = d.head_forward_angle?.toFixed(1)||'--';
+  document.getElementById('n-shoulder').textContent = d.shoulder_slope?.toFixed(1)||'--';
+  document.getElementById('n-gazeh').textContent    = d.gaze_horizontal?.toFixed(2)||'--';
+  document.getElementById('n-light').textContent    = Math.round(d.brightness)||'--';
+
+  // Live chart
+  const now = Date.now()/1000;
+  livePoints.push({t:now, s:score});
+  livePoints = livePoints.filter(p => now-p.t < 60);
+  refreshLiveChart();
+
+  // Alerts
+  if (d.head_position_status==='Alert')    pushAlert('Head', 'HEAD TOO FAR FORWARD — sit straight', 'bad');
+  if (d.shoulder_status==='Alert')         pushAlert('Shoulder','SHOULDERS UNEVEN — straighten up', 'bad');
+  if (d.eye_contact_status==='Alert')      pushAlert('Gaze','EYES DRIFTING — look at screen', 'bad');
+  if (d.head_position_status==='Warning')  pushAlert('Head','Head position — check your posture', 'warn');
+  if (d.brightness < 20)                   pushAlert('Light','LOW LIGHT DETECTED', 'warn');
+}
+
+function setMetric(key, status, val, text, barPct) {
+  const badge   = document.getElementById(`badge-${key}`);
+  const bar     = document.getElementById(`bar-${key}`);
+  const valEl   = document.getElementById(`val-${key}`);
+  if (!badge) return;
+
+  const s = (status||'').toLowerCase();
+  let cls='mb-unknown', col='var(--cyan)', label='—';
+  if      (s==='good')    { cls='mb-good';    col='var(--green)'; label='GOOD'; }
+  else if (s==='warning') { cls='mb-warning'; col='var(--amber)'; label='WARN'; }
+  else if (s==='alert')   { cls='mb-alert';   col='var(--red)';   label='ALERT'; }
+  else if (status)        { label=status; }
+
+  badge.className = `metric-badge ${cls}`;
+  badge.textContent = label;
+  bar.style.width = (barPct||0) + '%';
+  bar.style.background = col;
+  if (valEl) valEl.textContent = text;
+}
+
+let alertCooldown = {};
+function pushAlert(type, msg, level) {
+  const key = type+level;
+  const now = Date.now();
+  if (alertCooldown[key] && now - alertCooldown[key] < 8000) return;
+  alertCooldown[key] = now;
+
+  const feed = document.getElementById('alerts-scroll');
+  const empty = feed.querySelector('[style*="NO ALERTS"]');
+  if (empty) feed.innerHTML = '';
+
+  const t = new Date().toTimeString().slice(0,8);
+  const el = document.createElement('div');
+  el.className = `alert-card ${level}`;
+  el.innerHTML = `
+    <div class="alert-head">
+      <span class="alert-type">${type}</span>
+      <span class="alert-time">${t}</span>
+    </div>
+    <div class="alert-msg">${msg}</div>`;
+  feed.insertBefore(el, feed.firstChild);
+  while (feed.children.length > 25) feed.removeChild(feed.lastChild);
+}
+
+// ── CHARTS ───────────────────────────────────────────────
+const chartOpts = (color, fill) => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  animation: { duration: 400 },
+  plugins: { legend:{display:false}, tooltip:{
+    backgroundColor:'rgba(12,12,18,0.9)',
+    borderColor:'rgba(255,255,255,0.1)',
+    borderWidth:1,
+    titleFont:{family:'JetBrains Mono',size:10},
+    bodyFont: {family:'JetBrains Mono',size:11},
+    titleColor:'#8888aa',
+    bodyColor:'#f0f0f8',
+    padding:10,
+  }},
+  scales:{
+    x:{ grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#44445a',font:{family:'JetBrains Mono',size:9}} },
+    y:{ min:0, max:100, grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#44445a',font:{family:'JetBrains Mono',size:9}} },
+  },
+});
+
+const trendCtx = document.getElementById('chart-trend').getContext('2d');
+const liveCtx  = document.getElementById('chart-live').getContext('2d');
+
+const trendChart = new Chart(trendCtx, {
+  type: 'line',
+  data: { labels:[], datasets:[{
+    data:[], label:'Score',
+    borderColor:'#b060ff',
+    backgroundColor:'rgba(176,96,255,0.08)',
+    borderWidth:2, pointRadius:4,
+    pointBackgroundColor:'#b060ff',
+    pointBorderColor:'#060609',
+    pointBorderWidth:2,
+    fill:true, tension:0.4,
+  }]},
+  options: chartOpts('#b060ff', true),
+});
+
+const liveChart = new Chart(liveCtx, {
+  type: 'line',
+  data: { labels:[], datasets:[{
+    data:[], label:'Live',
+    borderColor:'#00e5ff',
+    backgroundColor:'rgba(0,229,255,0.06)',
+    borderWidth:2, pointRadius:0,
+    fill:true, tension:0.3,
+  }]},
+  options: { ...chartOpts('#00e5ff',true), animation:{duration:0} },
+});
+
+function refreshLiveChart() {
+  const lastScore = livePoints[livePoints.length-1]?.s || 0;
+  const c = lastScore>=70 ? '#69ff8c' : lastScore>=40 ? '#ffb700' : '#ff4b6e';
+  liveChart.data.labels              = livePoints.map(()=>'');
+  liveChart.data.datasets[0].data   = livePoints.map(p=>p.s);
+  liveChart.data.datasets[0].borderColor = c;
+  liveChart.data.datasets[0].backgroundColor = c.replace('#','') === c ? `${c}10` : `${c}18`;
+  liveChart.update();
+}
+
+// ── LOAD STATS ───────────────────────────────────────────
+async function loadStats() {
+  try {
+    const [stats, sessions] = await Promise.all([
+      fetch(`${API_BASE}/stats/overview`).then(r=>r.json()),
+      fetch(`${API_BASE}/sessions/`).then(r=>r.json()),
+    ]);
+
+    // Stat strip
+    document.getElementById('st-sessions').textContent = stats.total_sessions;
+    document.getElementById('st-avg').textContent      = stats.avg_score;
+    document.getElementById('st-time').textContent     = stats.total_minutes;
+    document.getElementById('st-alerts').textContent   = stats.total_alerts;
+
+    // Trend chart
+    if (stats.score_trend?.length) {
+      trendChart.data.labels            = stats.score_trend.map(r=>r.date);
+      trendChart.data.datasets[0].data  = stats.score_trend.map(r=>r.score);
+      trendChart.update();
+    }
+
+    // Table
+    const tbody = document.getElementById('tbl-body');
+    if (!sessions.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="no-sessions">START TRACKER TO SEE SESSIONS</td></tr>';
+      return;
+    }
+    tbody.innerHTML = sessions.map(s => {
+      const sec = s.duration_sec||0;
+      const dur = sec>=60 ? `${Math.floor(sec/60)}m ${sec%60}s` : `${sec}s`;
+      const score = Math.round(s.avg_score||0);
+      const sc = score>=70 ? '#69ff8c' : score>=40 ? '#ffb700' : '#ff4b6e';
+      const dt = new Date(s.started_at);
+      const dateStr = dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+      const timeStr = dt.toTimeString().slice(0,5);
+      return `<tr>
+        <td style="font-family:var(--mono);color:var(--muted);font-size:10px">#${s.id}</td>
+        <td>${dateStr} <span style="color:var(--muted)">${timeStr}</span></td>
+        <td style="font-family:var(--mono)">${dur}</td>
+        <td><span class="score-tag" style="background:${sc}18;color:${sc}">${score}</span></td>
+        <td style="font-family:var(--mono);color:var(--green)">${Math.round(s.max_score||0)}</td>
+        <td style="font-family:var(--mono);color:var(--red)">${s.alert_count||0}</td>
+      </tr>`;
+    }).join('');
+
+  } catch {
+    document.getElementById('tbl-body').innerHTML =
+      '<tr><td colspan="6" class="no-sessions">BACKEND OFFLINE — RUN UVICORN FIRST</td></tr>';
+    ['st-sessions','st-avg','st-time','st-alerts'].forEach(id => {
+      document.getElementById(id).textContent = '--';
+    });
+  }
+}
+
+// ── TOAST ─────────────────────────────────────────────────
+function toast(msg, color='cyan') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.borderColor = `rgba(0,229,255,0.3)`;
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'), 3000);
+}
+
+// ── INIT ─────────────────────────────────────────────────
+loadStats();
+connectWS();
+setInterval(loadStats, 30000);
+</script>
+</body>
+</html>
